@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+# claude-env: launch tmux session with the repo's main window + optional worktrees.
+#
+# Usage:
+#   claude-env                          # pick preset interactively
+#   claude-env <preset|path>            # use preset name or absolute repo path
+#   claude-env <...> --start            # auto-run `claude` in every tab
+#   claude-env <...> --ask              # prompt per tab whether to start `claude`
+#   claude-env <...> --add NAME[:BRANCH][,NAME[:BRANCH]...]
+#                                       # extra worktree+window(s)
+#                                       # repeatable AND comma-separated
+#   claude-env --list                   # list configured presets
+#
+# Examples:
+#   claude-env REPO
+#   claude-env REPO --add worktree1,worktree2
+#   claude-env REPO --add bugfix,review:origin/main
+#   claude-env REPO --add a --add b,c
+#
+# Cleanup (manual):
+#   git -C <repo> worktree list
+#   git -C <repo> worktree remove <repo>-<name>
+#   tmux kill-session -t claude-<repo-basename>
+#
+# Presets file: ~/.config/claude-env/presets
+#   Format: name = /absolute/path/to/repo
+
+set -euo pipefail
+
+PRESETS_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/claude-env/presets"
+START_MODE="manual"   # manual | start | ask
+TARGET=""
+EXTRAS=()             # entries: "name[:branch]"
+
+# ---------- preset parsing ----------
+declare -A PRESETS=()
+load_presets() {
+  [[ -f "$PRESETS_FILE" ]] || return 0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%%#*}"
+    [[ -z "${line// }" ]] && continue
+    if [[ "$line" =~ ^[[:space:]]*([A-Za-z0-9_.-]+)[[:space:]]*=[[:space:]]*(.+)[[:space:]]*$ ]]; then
+      local key="${BASH_REMATCH[1]}"
+      local val="${BASH_REMATCH[2]}"
+      val="${val%"${val##*[![:space:]]}"}"
+      val="${val/#\~/$HOME}"
+      PRESETS["$key"]="$val"
+    fi
+  done < "$PRESETS_FILE"
+}
+
+list_presets() {
+  load_presets
+  if [[ ${#PRESETS[@]} -eq 0 ]]; then
+    echo "no presets defined in $PRESETS_FILE"
+    return
+  fi
+  printf "%-20s  %s\n" "NAME" "PATH"
+  for k in "${!PRESETS[@]}"; do
+    printf "%-20s  %s\n" "$k" "${PRESETS[$k]}"
+  done | sort
+}
+
+pick_preset() {
+  load_presets
+  if [[ ${#PRESETS[@]} -eq 0 ]]; then
+    echo "no presets in $PRESETS_FILE — add some or pass a repo path" >&2
+    exit 1
+  fi
+  local keys=()
+  while IFS= read -r k; do keys+=("$k"); done < <(printf '%s\n' "${!PRESETS[@]}" | sort)
+  echo "Pick a project:" >&2
+  PS3="> "
+  select choice in "${keys[@]}"; do
+    if [[ -n "${choice:-}" ]]; then
+      TARGET="${PRESETS[$choice]}"
+      return
+    fi
+  done
+}
+
+# ---------- arg parsing ----------
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --list)   list_presets; exit 0 ;;
+    --start)  START_MODE="start"; shift ;;
+    --ask)    START_MODE="ask"; shift ;;
+    --add)
+      [[ $# -ge 2 ]] || { echo "--add needs NAME[:BRANCH][,...]" >&2; exit 1; }
+      IFS=',' read -ra _items <<< "$2"
+      for _it in "${_items[@]}"; do
+        _it="${_it#"${_it%%[![:space:]]*}"}"
+        _it="${_it%"${_it##*[![:space:]]}"}"
+        [[ -n "$_it" ]] && EXTRAS+=("$_it")
+      done
+      shift 2 ;;
+    -h|--help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -*) echo "unknown flag: $1" >&2; exit 1 ;;
+    *)  TARGET="$1"; shift ;;
+  esac
+done
+
+# ---------- resolve target ----------
+load_presets
+if [[ -z "$TARGET" ]]; then
+  pick_preset
+elif [[ -n "${PRESETS[$TARGET]:-}" ]]; then
+  TARGET="${PRESETS[$TARGET]}"
+fi
+
+REPO="$(realpath "$TARGET")"
+if [[ ! -d "$REPO/.git" && ! -f "$REPO/.git" ]]; then
+  echo "error: $REPO is not a git repo" >&2
+  exit 1
+fi
+
+PARENT="$(dirname "$REPO")"
+NAME="$(basename "$REPO")"
+
+ensure_worktree() {
+  local path="$1" branch="$2"
+  if [[ -d "$path" ]]; then
+    return
+  fi
+  if git -C "$REPO" show-ref --verify --quiet "refs/heads/$branch" \
+     || git -C "$REPO" show-ref --verify --quiet "refs/remotes/$branch"; then
+    git -C "$REPO" worktree add "$path" "$branch"
+  else
+    git -C "$REPO" worktree add -b "$branch" "$path"
+  fi
+}
+
+# ---------- build per-window shell command ----------
+shell="${SHELL:-/bin/bash}"
+case "$START_MODE" in
+  start)
+    win_cmd() { printf '%q -lc %q' "$shell" "claude; exec $shell -l"; }
+    ;;
+  ask)
+    win_cmd() {
+      printf '%q -lc %q' "$shell" \
+        "read -r -p $'start claude here? [Y/n] ' a; case \"\$a\" in n|N) ;; *) claude ;; esac; exec $shell -l"
+    }
+    ;;
+  *)
+    win_cmd() { printf '%q -l' "$shell"; }
+    ;;
+esac
+
+SESSION="claude-${NAME}"
+
+ensure_window() {
+  local win="$1" cwd="$2"
+  if tmux list-windows -t "$SESSION" -F '#W' 2>/dev/null | grep -qx "$win"; then
+    return
+  fi
+  tmux new-window -t "$SESSION" -n "$win" -c "$cwd" "$(win_cmd)"
+}
+
+existing=0
+if tmux has-session -t "$SESSION" 2>/dev/null; then
+  existing=1
+fi
+
+if (( existing == 0 )); then
+  tmux new-session -d -s "$SESSION" -n main -c "$REPO" "$(win_cmd)"
+fi
+
+for entry in "${EXTRAS[@]+"${EXTRAS[@]}"}"; do
+  wname="${entry%%:*}"
+  wbranch="${entry#*:}"
+  [[ "$wbranch" == "$entry" ]] && wbranch="$wname"
+  if [[ -z "$wname" ]]; then
+    echo "skip empty --add entry" >&2; continue
+  fi
+  wpath="$PARENT/${NAME}-${wname}"
+  ensure_worktree "$wpath" "$wbranch"
+  ensure_window "$wname" "$wpath"
+done
+
+if (( existing == 0 )); then
+  tmux select-window -t "$SESSION:main"
+fi
+exec tmux attach -t "$SESSION"

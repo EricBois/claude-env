@@ -1,0 +1,9 @@
+# claude-env presets
+# Format:  name = /absolute/path/to/repo
+# Lines starting with # are ignored.  ~ expands to $HOME.
+#
+# Copy this file to:  ~/.config/claude-env/presets
+# Then edit with your own repos.
+
+# myproject = ~/projects/myproject
+# work-api  = /home/me/code/work/api

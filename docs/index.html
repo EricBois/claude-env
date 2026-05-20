@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Claude Code workspace setup — Ghostty + tmux + worktrees + difit</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --fg: #e6e7ea;
+    --muted: #8b93a7;
+    --card: #161a23;
+    --border: #232838;
+    --accent: #f38ba8;
+    --accent-2: #89b4fa;
+    --green: #a6e3a1;
+    --yellow: #f9e2af;
+    --code-bg: #11141c;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #fafbfc;
+      --fg: #1c1f26;
+      --muted: #5a6478;
+      --card: #ffffff;
+      --border: #e2e6ee;
+      --accent: #d24a6f;
+      --accent-2: #2563eb;
+      --green: #2f7a2a;
+      --yellow: #946800;
+      --code-bg: #f3f5f9;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.55;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 48px 24px 96px; }
+  header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 20px;
+    margin-bottom: 32px;
+  }
+  h1 { font-size: 1.9rem; margin: 0 0 6px; letter-spacing: -0.01em; }
+  header p { color: var(--muted); margin: 0; }
+  h2 {
+    font-size: 1.3rem;
+    margin: 44px 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: 1.05rem; margin: 24px 0 8px; }
+  p { margin: 8px 0 12px; }
+  code {
+    font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--code-bg);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-size: 0.88rem;
+    line-height: 1.5;
+  }
+  pre code { background: transparent; padding: 0; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 14px 0;
+  }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .row > .card { flex: 1; min-width: 260px; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    background: var(--code-bg);
+    color: var(--accent-2);
+    border: 1px solid var(--border);
+  }
+  .pill.ok    { color: var(--green); }
+  .pill.warn  { color: var(--yellow); }
+  .warn {
+    border-left: 3px solid var(--yellow);
+    padding: 10px 14px;
+    background: var(--code-bg);
+    border-radius: 0 8px 8px 0;
+    color: var(--fg);
+  }
+  .ok {
+    border-left: 3px solid var(--green);
+    padding: 10px 14px;
+    background: var(--code-bg);
+    border-radius: 0 8px 8px 0;
+  }
+  kbd {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: inherit;
+    font-size: 0.85em;
+    white-space: nowrap;
+  }
+  ul { padding-left: 22px; }
+  li { margin: 4px 0; }
+  details { margin: 10px 0; }
+  summary { cursor: pointer; color: var(--accent-2); }
+  footer {
+    margin-top: 60px;
+    color: var(--muted);
+    font-size: 0.85rem;
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+  }
+  a { color: var(--accent-2); }
+  nav.toc {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 20px;
+    margin: 20px 0 28px;
+    font-size: 0.95rem;
+  }
+  nav.toc ol { margin: 6px 0 0 0; padding-left: 22px; }
+  nav.toc li { margin: 3px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Claude Code workspace — Ghostty + tmux + git worktrees + difit</h1>
+  <p>Manjaro Linux. Per-project tmux session: <code>main</code> window plus optional worktree windows added via <code>--add</code>. Preset-driven launcher. Diff review via <code>difit</code> popup.</p>
+</header>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#ghostty">Ghostty config</a></li>
+    <li><a href="#claude-env">claude-env launcher</a></li>
+    <li><a href="#presets">Presets file</a></li>
+    <li><a href="#tmux">tmux config &amp; shortcuts</a></li>
+    <li><a href="#difit">difit diff review</a></li>
+    <li><a href="#workflow">Daily workflow</a></li>
+    <li><a href="#remote">Remote access (phone / laptop)</a></li>
+    <li><a href="#troubleshoot">Troubleshooting</a></li>
+  </ol>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="ghostty">1. Ghostty config</h2>
+<p>Path: <code>~/.config/ghostty/config</code>. Catppuccin auto light/dark, JetBrainsMono Nerd Font, Quake-style quick terminal, generous scrollback. Linux-native keybinds (ctrl+shift family).</p>
+
+<h3>Keybind reference</h3>
+<table>
+  <tr><th>Keys</th><th>Action</th></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd></td><td>new tab</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>PgUp</kbd> / <kbd>PgDn</kbd></td><td>previous / next tab</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd></td><td>close tab / window</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd></td><td>split right</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd></td><td>split down</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>←</kbd>/<kbd>→</kbd>/<kbd>↑</kbd>/<kbd>↓</kbd></td><td>focus split in direction</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>=</kbd></td><td>equalize splits</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td>toggle split zoom</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>-</kbd> / <kbd>0</kbd></td><td>font size up / down / reset</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>`</kbd></td><td>toggle quick terminal (global)</td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>,</kbd></td><td>reload config</td></tr>
+</table>
+
+<details>
+<summary>Full config</summary>
+<pre><code># --- Typography ---
+font-family = JetBrainsMonoNerdFont
+font-size = 11
+font-thicken = true
+
+# --- Theme ---
+theme = light:Catppuccin Latte,dark:Catppuccin Mocha
+
+# --- Window ---
+background-opacity = 0.9
+background-blur-radius = 20
+window-padding-x = 10
+window-padding-y = 8
+window-save-state = always
+window-theme = auto
+gtk-titlebar-style = tabs    # tabs merged into titlebar (Linux equivalent of macOS transparent style)
+
+# --- Cursor / mouse ---
+cursor-style = bar
+cursor-style-blink = true
+cursor-opacity = 0.8
+mouse-hide-while-typing = true
+copy-on-select = clipboard
+
+# --- Quick terminal (Quake-style dropdown) ---
+quick-terminal-position = top
+quick-terminal-screen = mouse
+quick-terminal-autohide = true
+quick-terminal-animation-duration = 0.15
+
+# --- Security ---
+clipboard-paste-protection = true
+clipboard-paste-bracketed-safe = true
+
+shell-integration = detect
+
+# --- Keybindings (Linux) ---
+keybind = ctrl+shift+t=new_tab
+keybind = ctrl+page_up=previous_tab
+keybind = ctrl+page_down=next_tab
+keybind = ctrl+shift+w=close_surface
+keybind = ctrl+shift+o=new_split:right
+keybind = ctrl+shift+e=new_split:down
+keybind = ctrl+alt+left=goto_split:left
+keybind = ctrl+alt+right=goto_split:right
+keybind = ctrl+alt+up=goto_split:top
+keybind = ctrl+alt+down=goto_split:bottom
+keybind = ctrl+shift+equal=equalize_splits
+keybind = ctrl+shift+z=toggle_split_zoom
+keybind = ctrl+plus=increase_font_size:1
+keybind = ctrl+equal=increase_font_size:1
+keybind = ctrl+minus=decrease_font_size:1
+keybind = ctrl+zero=reset_font_size
+keybind = global:ctrl+grave_accent=toggle_quick_terminal
+keybind = ctrl+shift+comma=reload_config
+
+scrollback-limit = 25000000
+</code></pre>
+</details>
+
+<p>Verify font installed: <code>fc-list | grep -i jetbrains</code>. Validate config syntax: <code>ghostty +validate-config</code>.</p>
+
+<h3>Linux/GTK polish knobs</h3>
+<p>The original gist had macOS-only options. Linux equivalents that actually do something:</p>
+<table>
+  <tr><th>Option</th><th>Effect</th></tr>
+  <tr><td><code>gtk-titlebar-style = tabs</code></td><td><strong>Currently set.</strong> Merges tabs into titlebar — closest analog to macOS <code>transparent</code>. Saves one row of pixels.</td></tr>
+  <tr><td><code>gtk-titlebar-style = native</code></td><td>Default. Separate titlebar + tab bar.</td></tr>
+  <tr><td><code>gtk-titlebar = false</code></td><td>Kill the titlebar entirely.</td></tr>
+  <tr><td><code>gtk-titlebar-hide-when-maximized = true</code></td><td>Auto-hide titlebar when window is maximized.</td></tr>
+  <tr><td><code>gtk-toolbar-style = flat</code> / <code>raised</code> / <code>raised-border</code></td><td>Tab/toolbar shadow style.</td></tr>
+  <tr><td><code>gtk-tabs-location = top</code> / <code>bottom</code> / <code>hidden</code></td><td>Where tab bar sits.</td></tr>
+  <tr><td><code>gtk-wide-tabs = true</code></td><td>Tabs span full width (default true).</td></tr>
+  <tr><td><code>gtk-single-instance = true</code></td><td>One process shared by all Ghostty launches. Enables <code>ghostty +new-window</code> to reuse existing instance.</td></tr>
+  <tr><td><code>gtk-custom-css = ~/.config/ghostty/style.css</code></td><td>Full CSS escape hatch — restyle anything.</td></tr>
+  <tr><td><code>window-decoration = none</code></td><td>Completely borderless window.</td></tr>
+  <tr><td><code>window-padding-balance = true</code></td><td>Distribute leftover padding evenly when grid doesn't fit.</td></tr>
+  <tr><td><code>window-padding-color = extend</code></td><td>Stretch background color into padding area.</td></tr>
+  <tr><td><code>window-titlebar-background = #1e1e2e</code></td><td>Custom titlebar color (requires <code>window-theme = ghostty</code>).</td></tr>
+  <tr><td><code>confirm-close-surface = false</code></td><td>Skip the "really close?" dialog.</td></tr>
+  <tr><td><code>app-notifications =</code> (empty)</td><td>Mute clipboard/config-reload toasts.</td></tr>
+  <tr><td><code>background-image = ~/wall.png</code> + <code>background-image-opacity = 0.15</code></td><td>Background image with low opacity.</td></tr>
+  <tr><td><code>app-id = com.mitchellh.ghostty.work</code></td><td>Custom app id — gives Ghostty a separate desktop entry, useful for distinct profiles.</td></tr>
+</table>
+<p>Inspect all defaults + docs: <code>ghostty +show-config --default --docs | less</code>.</p>
+
+<!-- ============================================================ -->
+<h2 id="claude-env">2. claude-env launcher</h2>
+<p>Path: <code>~/bin/claude-env</code>. Creates two sibling git worktrees and a tmux session with three named windows. Survives Ghostty restarts via <code>tmux attach</code>.</p>
+
+<h3>Install summary</h3>
+<ul>
+  <li>Script: <code>~/bin/claude-env</code> (executable)</li>
+  <li>Presets: <code>~/.config/claude-env/presets</code></li>
+  <li><code>~/bin</code> added to <code>PATH</code> in <code>.bashrc</code></li>
+  <li>Dependencies: <code>git</code>, <code>tmux</code>, <code>claude</code>, optional <code>difit</code></li>
+</ul>
+
+<h3>Usage</h3>
+<table>
+  <tr><th>Command</th><th>Effect</th></tr>
+  <tr><td><code>claude-env</code></td><td>Pick preset interactively (numbered menu).</td></tr>
+  <tr><td><code>claude-env REPO</code></td><td>Use preset named <code>REPO</code>.</td></tr>
+  <tr><td><code>claude-env ~/projects/foo</code></td><td>Use explicit repo path.</td></tr>
+  <tr><td><code>claude-env --list</code></td><td>Print all presets.</td></tr>
+  <tr><td><code>claude-env REPO --start</code></td><td>Auto-run <code>claude</code> in every tab.</td></tr>
+  <tr><td><code>claude-env REPO --ask</code></td><td>Prompt per tab before starting <code>claude</code>.</td></tr>
+  <tr><td><code>claude-env REPO --add bugfix</code></td><td>Worktree+window <code>bugfix</code> on branch <code>bugfix</code>.</td></tr>
+  <tr><td><code>claude-env REPO --add worktree1,worktree2</code></td><td>Classic two-worktree layout via comma list.</td></tr>
+  <tr><td><code>claude-env REPO --add review:origin/main</code></td><td>Worktree <code>review</code> tracking branch <code>origin/main</code>.</td></tr>
+  <tr><td><code>claude-env REPO --add a --add b,c</code></td><td>Repeatable flag, comma list works in either.</td></tr>
+</table>
+
+<h3><code>--add NAME[:BRANCH]</code> semantics</h3>
+<ul>
+  <li><strong>Worktree dir</strong>: <code>&lt;repo&gt;-NAME</code> (sibling of repo).</li>
+  <li><strong>Branch</strong>: <code>BRANCH</code> if supplied after colon, else <code>NAME</code> itself.</li>
+  <li>If branch exists, worktree checks it out. If not, created with <code>worktree add -b</code>.</li>
+  <li><strong>Idempotent</strong>: re-running with the same <code>--add</code> reuses the worktree and skips creating a duplicate tmux window.</li>
+  <li>Works on first launch <em>or</em> when reattaching an existing session — extras get appended either way.</li>
+</ul>
+
+<h3>Behaviour</h3>
+<ul>
+  <li>Default mode = <strong>manual</strong>. Each tab opens login shell only. Type <code>claude</code> when ready.</li>
+  <li>Worktrees created on first run, reused after. Idempotent.</li>
+  <li>tmux session named <code>claude-&lt;repo-name&gt;</code>. Re-running attaches instead of duplicating.</li>
+  <li>Default layout: just the <code>main</code> window (repo root). All extra workspaces are opt-in via <code>--add</code>.</li>
+  <li>Cleanup is intentionally manual — see Troubleshooting §7.</li>
+  <li>Add tmux F-key bindings for new windows if you want fast jumps — edit <code>~/.tmux.conf</code> to add e.g. <code>bind -n F4 select-window -t bugfix</code>.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="presets">3. Presets file</h2>
+<p>Path: <code>~/.config/claude-env/presets</code>. One <code>name = path</code> per line. <code>~</code> expands to <code>$HOME</code>. <code>#</code> starts a comment.</p>
+<pre><code># ~/.config/claude-env/presets
+REPO   = ~/projects/myrepo
+app1     = ~/projects/app1
+app2     = ~/projects/app2
+app3     = ~/projects/app3
+</code></pre>
+<div class="ok">
+<strong>Parser fix applied:</strong> tolerates last line without trailing newline (common when editing in some editors). Just save and rerun <code>claude-env --list</code>.
+</div>
+
+<!-- ============================================================ -->
+<h2 id="tmux">4. tmux config &amp; shortcuts</h2>
+<p>Path: <code>~/.tmux.conf</code>. Direct, no-prefix shortcuts. TUI-safe fallbacks for when Claude Code consumes <kbd>Alt</kbd>.</p>
+
+<h3>Shortcuts</h3>
+<table>
+  <tr><th>Keys</th><th>Action</th><th>Works in Claude TUI?</th></tr>
+  <tr><td><kbd>F1</kbd> / <kbd>F2</kbd> / <kbd>F3</kbd></td><td>main / worktree1 / worktree2</td><td><span class="pill ok">yes</span></td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>←</kbd> / <kbd>→</kbd></td><td>prev / next window</td><td><span class="pill ok">yes</span></td></tr>
+  <tr><td><kbd>Alt</kbd>+<kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd></td><td>direct jump</td><td><span class="pill warn">only outside TUIs</span></td></tr>
+  <tr><td>mouse click status bar</td><td>tab name</td><td><span class="pill ok">yes</span></td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>b</kbd> <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd></td><td>prefix chord (tmux default)</td><td><span class="pill ok">yes</span></td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>b</kbd> <kbd>d</kbd></td><td>difit diff viewer popup</td><td><span class="pill ok">yes</span></td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>b</kbd> <kbd>Ctrl</kbd>+<kbd>d</kbd></td><td>difit in background (browser only)</td><td><span class="pill ok">yes</span></td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>b</kbd> <kbd>D</kbd> (capital)</td><td>detach session</td><td><span class="pill ok">yes</span></td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>b</kbd> <kbd>r</kbd></td><td>reload tmux config</td><td><span class="pill ok">yes</span></td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>b</kbd> <kbd>z</kbd></td><td>zoom current pane</td><td><span class="pill ok">yes</span></td></tr>
+  <tr><td><kbd>Ctrl</kbd>+<kbd>b</kbd> <kbd>[</kbd></td><td>copy/scroll mode (<kbd>q</kbd> exits)</td><td><span class="pill ok">yes</span></td></tr>
+</table>
+
+<details>
+<summary>Full <code>~/.tmux.conf</code></summary>
+<pre><code># ~/.tmux.conf
+
+# --- Direct window switching by NAME (Alt + number) ---
+bind -n M-1 select-window -t main
+bind -n M-2 select-window -t worktree1
+bind -n M-3 select-window -t worktree2
+
+# --- F-key fallback (TUIs don't eat F-keys) ---
+bind -n F1 select-window -t main
+bind -n F2 select-window -t worktree1
+bind -n F3 select-window -t worktree2
+
+# --- Ctrl-Shift arrows for prev/next ---
+bind -n C-S-Left  previous-window
+bind -n C-S-Right next-window
+
+# --- Reload config ---
+bind r source-file ~/.tmux.conf \; display "tmux config reloaded"
+
+# --- difit: diff viewer popup ---
+bind d display-popup -d "#{pane_current_path}" -w 90% -h 85% -E \
+  "difit . ; read -n1 -s -p 'press any key to close'"
+bind D detach-client
+bind C-d run-shell "cd #{pane_current_path} && difit . &gt;/dev/null 2&gt;&amp;1 &amp;"
+
+# --- Mouse + niceties ---
+set -g mouse on
+set -g base-index 1
+setw -g pane-base-index 1
+set -g renumber-windows on
+set -g status-left-length 30
+set -g status-right-length 80
+set -g status-left  "#[bold]#S #[default]| "
+set -g status-right "%H:%M  %d-%b"
+set -g window-status-format         " #I:#W "
+set -g window-status-current-format "#[reverse] #I:#W #[default]"
+set -sg escape-time 10
+set -g history-limit 100000
+set -g default-terminal "tmux-256color"
+set -ga terminal-overrides ",xterm-ghostty:Tc,xterm-256color:Tc"
+</code></pre>
+</details>
+
+<!-- ============================================================ -->
+<h2 id="difit">5. difit — diff review viewer</h2>
+<p><strong>difit</strong> is a CLI tool that serves a GitHub-style diff viewer in your browser. Review Claude Code's changes, leave comments, export comments as an AI prompt back to Claude. Repo: <a href="https://github.com/yoshiko-pg/difit" target="_blank">github.com/yoshiko-pg/difit</a>.</p>
+
+<h3>Install</h3>
+<pre><code>npm install -g difit
+# or one-shot:  npx difit</code></pre>
+
+<h3>Common invocations</h3>
+<table>
+  <tr><th>Command</th><th>Shows</th></tr>
+  <tr><td><code>difit</code></td><td>HEAD commit</td></tr>
+  <tr><td><code>difit .</code></td><td>All uncommitted changes (working tree vs HEAD)</td></tr>
+  <tr><td><code>difit staged</code></td><td>Only staged changes</td></tr>
+  <tr><td><code>difit . main</code></td><td>Working tree vs <code>main</code> branch</td></tr>
+  <tr><td><code>difit HEAD~3</code></td><td>Compare HEAD with HEAD~3</td></tr>
+  <tr><td><code>difit --port 5001</code></td><td>Custom port (use if conflicts)</td></tr>
+  <tr><td><code>difit --pr &lt;url&gt;</code></td><td>Review a GitHub PR</td></tr>
+</table>
+
+<h3>Integration with claude-env</h3>
+<ul>
+  <li>From any tmux window: <kbd>Ctrl</kbd>+<kbd>b</kbd> <kbd>d</kbd> opens <code>difit .</code> in a popup, serving the current pane's cwd.</li>
+  <li>Each window has the correct worktree cwd → review the right diff with zero typing.</li>
+  <li>difit picks a free port automatically — safe to run in <code>worktree1</code> and <code>worktree2</code> simultaneously.</li>
+  <li>Press any key to close the popup; the browser tab stays usable until you close it.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="workflow">6. Daily workflow</h2>
+<ol>
+  <li>Launch Ghostty.</li>
+  <li><code>claude-env REPO --add worktree1,worktree2</code> — main window + two worktree windows.</li>
+  <li>tmux session attaches. You land on window <code>main</code>.</li>
+  <li><kbd>F2</kbd> → jump to <code>worktree1</code>. Type <code>claude</code>.</li>
+  <li>Describe the task. Claude edits files in the <code>worktree1</code> worktree.</li>
+  <li><kbd>Ctrl</kbd>+<kbd>b</kbd> <kbd>d</kbd> → diff viewer popup, review changes in browser.</li>
+  <li>Leave inline comments in difit, export as prompt, paste back into Claude.</li>
+  <li>Commit when satisfied. <kbd>F3</kbd> to start a parallel task in <code>worktree2</code> without context-switching the main agent.</li>
+  <li>Need another isolated branch? From outside the session: <code>claude-env REPO --add hotfix</code> appends a new window to the running session.</li>
+  <li><kbd>Ctrl</kbd>+<kbd>b</kbd> <kbd>D</kbd> detaches; close Ghostty. Reopen later: <code>claude-env REPO</code> reattaches the same session.</li>
+</ol>
+<p>The F-key bindings in <code>~/.tmux.conf</code> map <kbd>F1</kbd>/<kbd>F2</kbd>/<kbd>F3</kbd> to window names <code>main</code> / <code>worktree1</code> / <code>worktree2</code>. If you use different worktree names, either rename them in <code>~/.tmux.conf</code> or rely on <kbd>Ctrl</kbd>+<kbd>b</kbd> <kbd>w</kbd> (window picker).</p>
+
+<!-- ============================================================ -->
+<h2 id="remote">7. Remote access (phone / laptop / anywhere)</h2>
+<p>The tmux session lives on the host running <code>claude-env</code>, so any device that can SSH in can reattach the same Claude Code session — including an Android phone via <a href="https://termux.dev">Termux</a>.</p>
+
+<h3>SSH vs mosh</h3>
+<table>
+  <tr><th>Transport</th><th>Notes</th></tr>
+  <tr><td><code>ssh</code></td><td>Works everywhere. TCP — drops on Wi-Fi → LTE handoffs, suspend/resume, or weak signal.</td></tr>
+  <tr><td><code>mosh</code></td><td>UDP-based. Survives roaming, sleep/wake, and flaky mobile connections. Recommended for phone/tablet use.</td></tr>
+</table>
+
+<h3>Tailscale for zero-config networking</h3>
+<p>Install <a href="https://tailscale.com">Tailscale</a> on both ends to get a private network between your devices — no port forwarding, no public IP, no DNS setup. The host appears as a stable hostname on every client.</p>
+
+<h3>From Termux on Android</h3>
+<pre><code># one-time
+pkg install openssh mosh
+# also install Tailscale from F-Droid or Play Store, then `tailscale up`
+
+# connect
+mosh &lt;tailscale-host&gt;             # preferred on mobile
+# or
+ssh &lt;tailscale-host&gt;
+
+# reattach the workspace
+claude-env REPO</code></pre>
+
+<div class="ok">
+Because the tmux session is persistent, closing Termux, locking the phone, or switching networks does not lose state. Reconnect → <code>claude-env REPO</code> → same session.
+</div>
+
+<!-- ============================================================ -->
+<h2 id="troubleshoot">8. Troubleshooting</h2>
+
+<h3>“command not found: claude-env”</h3>
+<pre><code>source ~/.bashrc          # PATH not loaded in current shell
+# or open a fresh terminal</code></pre>
+
+<h3>“no presets defined” but file has entries</h3>
+<p>Fixed: parser tolerates missing trailing newline. If still broken, ensure each line matches <code>name = path</code> (spaces around <code>=</code> ok, comments with <code>#</code> ok).</p>
+
+<h3>Alt shortcuts don't work inside Claude</h3>
+<p>Claude Code's TUI eats <kbd>Alt</kbd>+number for its own input editing. Use <kbd>F1</kbd>/<kbd>F2</kbd>/<kbd>F3</kbd> instead — F-keys reliably pass through to tmux.</p>
+
+<h3>tmux status bar truncates window names</h3>
+<p>Already widened in <code>~/.tmux.conf</code> (<code>status-left-length 30</code>). If still truncated, increase Ghostty window width or shrink <code>status-right</code>.</p>
+
+<h3>difit port already in use</h3>
+<pre><code>difit . --port 5001</code></pre>
+
+<h3>Kill a stuck session</h3>
+<pre><code>tmux ls
+tmux kill-session -t claude-myrepo</code></pre>
+
+<h3>Manual cleanup</h3>
+<p>By design, <code>claude-env</code> never removes worktrees. Tear down by hand when you're done with a feature:</p>
+<pre><code># 1. Detach from tmux if still attached:
+#    Ctrl+b D
+
+# 2. Inspect what's there
+git -C ~/projects/myrepo worktree list
+
+# 3. Remove one worktree (clean working tree required)
+git -C ~/projects/myrepo worktree remove ../myrepo-worktree1
+
+# 4. Force-remove if dirty
+git -C ~/projects/myrepo worktree remove ../myrepo-worktree1 --force
+
+# 5. Delete the branch if you no longer want it
+git -C ~/projects/myrepo branch -D worktree1
+
+# 6. Prune stale worktree metadata after manual rm
+git -C ~/projects/myrepo worktree prune
+
+# 7. Optionally drop the tmux session
+tmux kill-session -t claude-myrepo
+
+# Re-running `claude-env REPO --add worktree1,...` will recreate the worktree.
+</code></pre>
+
+<div class="ok">
+<strong>Recap.</strong> One command per project. <code>main</code> window by default, extra worktree windows via <code>--add</code> (comma-separated or repeated). In-place diff review via difit popup. Manual cleanup with <code>git worktree remove</code>. Add new projects by editing the presets file.
+</div>
+
+<footer>
+  Generated for Manjaro Linux 7.0.3 · Ghostty 1.3.1 · tmux + Claude Code + difit · <span class="pill">2026-05-13</span>
+</footer>
+
+</div>
+</body>
+</html>
