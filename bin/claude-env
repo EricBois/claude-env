@@ -12,10 +12,10 @@
 #   claude-env --list                   # list configured presets
 #
 # Examples:
-#   claude-env REPO
-#   claude-env REPO --add worktree1,worktree2
-#   claude-env REPO --add bugfix,review:origin/main
-#   claude-env REPO --add a --add b,c
+#   claude-env Propra
+#   claude-env Propra --add main-quest,side-quest
+#   claude-env Propra --add bugfix,review:origin/main
+#   claude-env Propra --add a --add b,c
 #
 # Cleanup (manual):
 #   git -C <repo> worktree list
@@ -149,12 +149,23 @@ esac
 
 SESSION="claude-${NAME}"
 
+shell_cmd() { printf '%q -l' "$shell"; }
+
+apply_layout() {
+  # Layout: left pane (claude, ~67%) + right column split top/bottom (~33% wide each)
+  local target="$1" cwd="$2"
+  tmux split-window -h -l 33% -t "${target}.1" -c "$cwd" "$(shell_cmd)"
+  tmux split-window -v -l 50% -t "${target}.2" -c "$cwd" "$(shell_cmd)"
+  tmux select-pane -t "${target}.1"
+}
+
 ensure_window() {
   local win="$1" cwd="$2"
   if tmux list-windows -t "$SESSION" -F '#W' 2>/dev/null | grep -qx "$win"; then
     return
   fi
   tmux new-window -t "$SESSION" -n "$win" -c "$cwd" "$(win_cmd)"
+  apply_layout "$SESSION:$win" "$cwd"
 }
 
 existing=0
@@ -164,6 +175,11 @@ fi
 
 if (( existing == 0 )); then
   tmux new-session -d -s "$SESSION" -n main -c "$REPO" "$(win_cmd)"
+  apply_layout "$SESSION:main" "$REPO"
+elif ! tmux list-windows -t "$SESSION" -F '#W' | grep -qx main; then
+  # recreate main window if it was closed
+  tmux new-window -t "$SESSION" -n main -c "$REPO" "$(win_cmd)"
+  apply_layout "$SESSION:main" "$REPO"
 fi
 
 for entry in "${EXTRAS[@]+"${EXTRAS[@]}"}"; do
